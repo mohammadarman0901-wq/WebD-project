@@ -1,0 +1,221 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zenzy Clothing Wear - POS</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="brand-name">Zenzy Clothing Wear</div>
+        <ul class="nav-links">
+            <li><button onclick="switchPage('home-page')" class="nav-btn active" id="nav-home-page">Home</button></li>
+            <li><button onclick="switchPage('products-page')" class="nav-btn" id="nav-products-page">Products</button></li>
+            <li><button onclick="switchPage('order-page')" class="nav-btn" id="nav-order-page">Select Your Order</button></li>
+            <li><button onclick="switchPage('database-page')" class="nav-btn" id="nav-database-page">Database</button></li>
+        </ul>
+    </nav>
+
+    <main class="main-content">
+        
+        <!-- PAGE 1: HOME PAGE -->
+        <section id="home-page" class="page active-page">
+            <div class="hero-section">
+                <h1>Welcome to Zenzy Clothing Wear</h1>
+                <p>Your premium destination for modern apparel.</p>
+                <button class="cta-btn" onclick="switchPage('order-page')">Start New Billing</button>
+            </div>
+        </section>
+
+        <!-- PAGE 2: PRODUCTS PAGE (Display Only) -->
+        <section id="products-page" class="page">
+            <h2>Complete Product Catalog</h2>
+            <div class="product-grid" id="full-catalog-grid">
+                <!-- JS will populate all products here -->
+            </div>
+        </section>
+
+        <!-- PAGE 3: SELECT YOUR ORDER (Billing System) -->
+        <section id="order-page" class="page">
+            <div class="pos-layout">
+                <!-- Left: Select Clothes -->
+                <div class="selection-panel">
+                    <h2>Select Clothes</h2>
+                    <div class="product-grid" id="order-catalog-grid">
+                        <!-- JS will populate products for selection here -->
+                    </div>
+                </div>
+
+                <!-- Right: Customer Details & Cart -->
+                <div class="billing-panel">
+                    <h2>Customer Bill</h2>
+                    
+                    <div class="customer-details">
+                        <input type="text" id="customer-name" placeholder="Customer Name" required>
+                        <input type="tel" id="customer-phone" placeholder="Customer Mobile Number" required>
+                        <input type="number" id="discount-given" placeholder="Discount Given (%)" min="0" max="100" step="any" oninput="updateCartUI()">
+                        
+                        <div class="payment-status-row">
+                            <label for="payment-status-select">Payment Status:</label>
+                            <select id="payment-status-select" class="status-dropdown">
+                                <option value="PAID">Paid</option>
+                                <option value="NOT PAID">Not Paid</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="cart-container" id="cart-items">
+                        <div class="empty-cart">No clothes added to the order.</div>
+                    </div>
+
+                    <div class="financials">
+                        <div class="summary-row">
+                            <span>Subtotal:</span>
+                            <span id="subtotal-amount">₹0.00</span>
+                        </div>
+                        <div class="summary-row">
+                            <span>Discount:</span>
+                            <span id="discount-amount">- ₹0.00 (0%)</span>
+                        </div>
+                        <div class="total-row">
+                            <span>Total Bill:</span>
+                            <span id="grand-total">₹0.00</span>
+                        </div>
+                        <button class="generate-bill-btn" id="generate-bill-btn" onclick="generateBill()">Generate Bill</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PAGE 4: DATABASE PAGE (Sales Record) -->
+        <section id="database-page" class="page">
+            <div class="db-header-bar">
+                <h2>Sales Database Overview</h2>
+                <button class="db-refresh-btn" onclick="loadDatabaseAnalytics()">↻ Refresh</button>
+            </div>
+
+            <!-- Database Controls / Filter Bar -->
+            <div class="filter-card">
+                <div class="filter-group">
+                    <label for="db-month-select">Select Month:</label>
+                    <select id="db-month-select" onchange="loadDatabaseAnalytics()">
+                        <option value="all">All Months</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="db-product-select">Select Product:</label>
+                    <select id="db-product-select" onchange="loadDatabaseAnalytics()">
+                        <option value="all">All Products</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="db-payment-filter">Payment Status:</label>
+                    <select id="db-payment-filter" onchange="loadDatabaseAnalytics()">
+                        <option value="ALL">All Status</option>
+                        <option value="PAID">Paid Only</option>
+                        <option value="NOT PAID">Not Paid Only</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Dashboard Stat Boxes -->
+            <div class="dashboard-stats">
+                <div class="stat-box">
+                    <h3>Total Orders</h3>
+                    <p id="total-orders-count">0</p>
+                    <span class="stat-note" id="orders-note">in selected filter</span>
+                </div>
+                <div class="stat-box">
+                    <h3>Total Sales (₹)</h3>
+                    <p id="total-sales-amount">₹0.00</p>
+                    <span class="stat-note" id="sales-note">gross revenue</span>
+                </div>
+                <div class="stat-box">
+                    <h3>Units Sold</h3>
+                    <p id="total-units-count">0</p>
+                    <span class="stat-note" id="product-units-note">for selected product</span>
+                </div>
+                <div class="stat-box">
+                    <h3>Payment Status</h3>
+                    <div class="payment-split">
+                        <span class="paid-val">Paid: <strong id="paid-sales-amount">₹0.00</strong></span>
+                        <span class="unpaid-val">Not Paid: <strong id="unpaid-sales-amount">₹0.00</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Per-Day Sales Breakdown -->
+            <div class="section-container">
+                <div class="section-title-row">
+                    <h3>Per-Day Sales Data</h3>
+                    <span class="badge-info" id="daily-sales-range-label">Daily records</span>
+                </div>
+                <div class="database-table-container">
+                    <table class="db-table" id="daily-sales-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Day</th>
+                                <th>Orders Count</th>
+                                <th>Units Sold</th>
+                                <th>Total Daily Sales (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="daily-table-body">
+                            <!-- Populated dynamically by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Customer Orders Database Table -->
+            <div class="section-container" style="margin-top: 30px;">
+                <div class="section-title-row">
+                    <h3>Customer Orders History</h3>
+                    <span class="badge-info" id="orders-count-label">0 Records</span>
+                </div>
+                <div class="database-table-container">
+                    <table class="db-table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Date & Time</th>
+                                <th>Customer Name</th>
+                                <th>Mobile Number</th>
+                                <th>Items Purchased</th>
+                                <th>Discount</th>
+                                <th>Total Amount</th>
+                                <th>Payment Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="db-table-body">
+                            <!-- JS will populate past orders from MySQL here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FINAL BILL POPUP -->
+    <div id="bill-modal" class="bill-overlay">
+        <div class="bill-box">
+            <div class="bill-title">Zenzy Clothing Wear</div>
+            <div class="bill-subtitle">Final Bill</div>
+            <div id="bill-content"></div>
+            <div class="bill-actions">
+                <button class="bill-btn print-btn" onclick="window.print()">Print Bill</button>
+                <button class="bill-btn close-btn" onclick="closeBill()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
