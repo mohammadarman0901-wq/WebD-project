@@ -122,6 +122,147 @@ app.patch('/api/orders/:id/payment', async (req, res) => {
     }
 });
 
+// Fetch single order details with items for editing
+app.get('/api/orders/:id', async (req, res) => {
+    try {
+        const orderId = req.params.id;
+        const [orders] = await pool.query(
+            `SELECT id, order_code, customer_name, customer_phone, subtotal, discount_percent, 
+                    discount_amount, total_amount, payment_status, 
+                    DATE_FORMAT(order_date, '%Y-%m-%d %H:%i:%s') AS order_date,
+                    DATE_FORMAT(order_date, '%Y-%m-%dT%H:%i') AS datetime_local
+             FROM orders WHERE id = ?`,
+            [orderId]
+        );
+
+        if (orders.length === 0) {
+            return res.status(404).json({ success: false, error: 'Order not found' });
+        }
+
+        const [items] = await pool.query(
+            `SELECT id, product_id, product_name, unit_price, quantity, item_total
+             FROM order_items WHERE order_id = ?`,
+            [orderId]
+        );
+
+        res.json({
+            success: true,
+            order: {
+                ...orders[0],
+                items
+            }
+        });
+    } catch (err) {
+        console.error('Error fetching order for edit:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Update an entire order entry (items, quantity, discount, final price, date, customer info)
+app.put('/api/orders/:id', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const orderId = req.params.id;
+        const {
+            customer_name,
+            customer_phone,
+            order_date,
+            payment_status,
+            discount_percent,
+            discount_amount,
+            total_amount,
+            items
+        } = req.body;
+
+        if (!customer_name || !customer_phone || !items || items.length === 0) {
+            return res.status(400).json({ success: false, error: 'Customer name, phone, and at least one item are required.' });
+        }
+
+        // Verify order exists
+        const [existing] = await connection.query('SELECT id FROM orders WHERE id = ?', [orderId]);
+        if (existing.length === 0) {
+            return res.status(404).json({ success: false, error: 'Order not found.' });
+        }
+
+        // Calculate subtotal from items
+        let subtotal = 0;
+        const processedItems = items.map(item => {
+            const qty = parseInt(item.quantity, 10) || 1;
+            const price = parseFloat(item.unit_price !== undefined ? item.unit_price : item.price) || 0;
+            const itemTotal = Math.round(price * qty * 100) / 100;
+            subtotal += itemTotal;
+            return {
+                product_id: item.product_id || item.id || 'GEN',
+                product_name: item.product_name || item.name || 'Clothing Item',
+                unit_price: price,
+                quantity: qty,
+                item_total: itemTotal
+            };
+        });
+
+        const discPercent = parseFloat(discount_percent) || 0;
+        const calculatedDiscount = Math.round((subtotal * discPercent) / 100 * 100) / 100;
+        const discAmount = (discount_amount !== undefined && discount_amount !== null && !isNaN(parseFloat(discount_amount)))
+            ? parseFloat(discount_amount)
+            : calculatedDiscount;
+
+        // Final price: allows manual override if specified, otherwise subtotal - discount
+        let grandTotal = (total_amount !== undefined && total_amount !== null && !isNaN(parseFloat(total_amount)))
+            ? parseFloat(total_amount)
+            : (subtotal - discAmount);
+        if (grandTotal < 0) grandTotal = 0;
+
+        const validStatus = (payment_status === 'NOT PAID') ? 'NOT PAID' : 'PAID';
+
+        await connection.beginTransaction();
+
+        // Update orders table
+        if (order_date) {
+            const formattedDate = order_date.replace('T', ' ');
+            await connection.query(
+                `UPDATE orders 
+                 SET customer_name = ?, customer_phone = ?, subtotal = ?, discount_percent = ?, 
+                     discount_amount = ?, total_amount = ?, payment_status = ?, order_date = ?
+                 WHERE id = ?`,
+                [customer_name.trim(), customer_phone.trim(), subtotal, discPercent, discAmount, grandTotal, validStatus, formattedDate, orderId]
+            );
+        } else {
+            await connection.query(
+                `UPDATE orders 
+                 SET customer_name = ?, customer_phone = ?, subtotal = ?, discount_percent = ?, 
+                     discount_amount = ?, total_amount = ?, payment_status = ?
+                 WHERE id = ?`,
+                [customer_name.trim(), customer_phone.trim(), subtotal, discPercent, discAmount, grandTotal, validStatus, orderId]
+            );
+        }
+
+        // Replace line items
+        await connection.query('DELETE FROM order_items WHERE order_id = ?', [orderId]);
+
+        for (const item of processedItems) {
+            await connection.query(
+                `INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, item_total)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [orderId, item.product_id, item.product_name, item.unit_price, item.quantity, item.item_total]
+            );
+        }
+
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: 'Order updated successfully',
+            orderId: orderId
+        });
+    } catch (err) {
+        await connection.rollback();
+        console.error('Error updating order:', err);
+        res.status(500).json({ success: false, error: err.message });
+    } finally {
+        connection.release();
+    }
+});
+
 // ==========================================
 // 3. SALES & ANALYTICS REPORT ENDPOINT
 // ==========================================

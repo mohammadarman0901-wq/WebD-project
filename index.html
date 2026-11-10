@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -213,6 +213,82 @@
                 <button class="bill-btn print-btn" onclick="window.print()">Print Bill</button>
                 <button class="bill-btn close-btn" onclick="closeBill()">Close</button>
             </div>
+        </div>
+    </div>
+
+    <!-- EDIT ORDER ENTRY POPUP -->
+    <div id="edit-order-modal" class="bill-overlay">
+        <div class="bill-box edit-modal-box">
+            <div class="edit-modal-header">
+                <div>
+                    <h3 id="edit-modal-title" style="color: var(--primary); font-size: 1.4rem;">Edit Order Entry</h3>
+                    <p style="color: #64748b; font-size: 0.88rem; margin-top: 2px;">Modify items, quantity, discount, final price, or date</p>
+                </div>
+                <button type="button" class="close-icon-btn" onclick="closeEditModal()">&times;</button>
+            </div>
+
+            <form id="edit-order-form" onsubmit="submitOrderEdit(event)">
+                <input type="hidden" id="edit-order-id">
+                
+                <div class="edit-form-grid">
+                    <div class="edit-field">
+                        <label for="edit-customer-name">Customer Name:</label>
+                        <input type="text" id="edit-customer-name" required>
+                    </div>
+                    <div class="edit-field">
+                        <label for="edit-customer-phone">Mobile Number:</label>
+                        <input type="tel" id="edit-customer-phone" required>
+                    </div>
+                    <div class="edit-field">
+                        <label for="edit-order-date">Order Date & Time:</label>
+                        <input type="datetime-local" id="edit-order-date" required>
+                    </div>
+                    <div class="edit-field">
+                        <label for="edit-payment-status">Payment Status:</label>
+                        <select id="edit-payment-status" class="status-dropdown">
+                            <option value="PAID">Paid</option>
+                            <option value="NOT PAID">Not Paid</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Items Section -->
+                <div class="edit-items-section">
+                    <div class="edit-items-header">
+                        <h4>Order Items & Quantities</h4>
+                        <button type="button" class="add-item-btn" onclick="addEditItemRow()">+ Add Item</button>
+                    </div>
+                    <div id="edit-items-list" class="edit-items-list">
+                        <!-- Populated dynamically with item rows -->
+                    </div>
+                </div>
+
+                <!-- Financials / Totals Section -->
+                <div class="edit-financials-box">
+                    <div class="edit-calc-row">
+                        <span>Items Subtotal:</span>
+                        <strong id="edit-calc-subtotal">₹0.00</strong>
+                    </div>
+                    <div class="edit-calc-row">
+                        <label for="edit-discount-percent">Discount (%):</label>
+                        <input type="number" id="edit-discount-percent" min="0" max="100" step="any" oninput="onEditDiscountInput()">
+                    </div>
+                    <div class="edit-calc-row">
+                        <span>Discount Amount:</span>
+                        <span id="edit-discount-amount" style="color: #64748b;">- ₹0.00</span>
+                    </div>
+                    <div class="edit-calc-row edit-total-highlight">
+                        <label for="edit-grand-total">Final Price (₹):</label>
+                        <input type="number" id="edit-grand-total" step="any" required>
+                    </div>
+                    <p style="font-size: 0.8rem; color: #94a3b8; margin-top: 6px;">* Final price auto-calculates from items and discount, or you can directly type a custom price.</p>
+                </div>
+
+                <div class="bill-actions" style="margin-top: 20px;">
+                    <button type="button" class="bill-btn" style="background: #94a3b8;" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="bill-btn close-btn" id="save-edit-btn">Save Changes to Database</button>
+                </div>
+            </form>
         </div>
     </div>
 

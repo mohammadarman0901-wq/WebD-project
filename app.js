@@ -1,4 +1,4 @@
-﻿// ==========================================
+// ==========================================
 // 1. INVENTORY & STATE
 // ==========================================
 let inventory = [
@@ -388,7 +388,10 @@ async function loadDatabaseAnalytics() {
                             <span class="badge-status ${badgeClass}">${order.payment_status}</span>
                         </td>
                         <td>
-                            <button class="toggle-btn" onclick="togglePaymentStatus(${order.id})">${nextActionText}</button>
+                            <div class="action-btn-group">
+                                <button class="edit-btn" onclick="openEditModal(${order.id})">✏️ Edit</button>
+                                <button class="toggle-btn" onclick="togglePaymentStatus(${order.id})">${nextActionText}</button>
+                            </div>
                         </td>
                     </tr>
                 `;
@@ -416,6 +419,255 @@ async function togglePaymentStatus(orderId) {
         }
     } catch (err) {
         alert('Network error updating status: ' + err.message);
+    }
+}
+
+// ==========================================
+// 7. ORDER EDIT FUNCTIONALITY
+// ==========================================
+let currentEditingOrder = null;
+let editItems = [];
+
+async function openEditModal(orderId) {
+    try {
+        const response = await fetch(`/api/orders/${orderId}`);
+        const result = await response.json();
+
+        if (!result.success || !result.order) {
+            return alert('Error loading order details: ' + (result.error || 'Not found'));
+        }
+
+        const order = result.order;
+        currentEditingOrder = order;
+
+        // Populate fields
+        document.getElementById('edit-order-id').value = order.id;
+        document.getElementById('edit-modal-title').textContent = `Edit Order: ${order.order_code}`;
+        document.getElementById('edit-customer-name').value = order.customer_name;
+        document.getElementById('edit-customer-phone').value = order.customer_phone;
+        document.getElementById('edit-order-date').value = order.datetime_local || '';
+        document.getElementById('edit-payment-status').value = order.payment_status;
+        document.getElementById('edit-discount-percent').value = parseFloat(order.discount_percent) || 0;
+        document.getElementById('edit-grand-total').value = parseFloat(order.total_amount).toFixed(2);
+
+        // Load items
+        editItems = (order.items && order.items.length > 0)
+            ? order.items.map(i => ({
+                product_id: i.product_id,
+                product_name: i.product_name,
+                unit_price: parseFloat(i.unit_price) || 0,
+                quantity: parseInt(i.quantity, 10) || 1
+            }))
+            : [{
+                product_id: inventory[0].id,
+                product_name: inventory[0].name,
+                unit_price: inventory[0].price,
+                quantity: 1
+            }];
+
+        renderEditItemsList();
+        recalcEditTotals(false); // keep existing final price on initial open
+
+        document.getElementById('edit-order-modal').classList.add('show');
+    } catch (err) {
+        alert('Failed to fetch order for editing: ' + err.message);
+    }
+}
+
+function closeEditModal() {
+    document.getElementById('edit-order-modal').classList.remove('show');
+    currentEditingOrder = null;
+    editItems = [];
+}
+
+function renderEditItemsList() {
+    const container = document.getElementById('edit-items-list');
+    if (!container) return;
+
+    if (editItems.length === 0) {
+        container.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem; text-align:center;">No items. Click "+ Add Item" above.</p>';
+        return;
+    }
+
+    container.innerHTML = editItems.map((item, idx) => {
+        const productOptions = inventory.map(p => 
+            `<option value="${p.id}" ${p.id === item.product_id ? 'selected' : ''}>${p.name} (₹${p.price})</option>`
+        ).join('');
+
+        const lineTotal = (item.unit_price * item.quantity).toFixed(2);
+
+        return `
+            <div class="edit-item-row">
+                <div>
+                    <label style="font-size:0.75rem; color:#64748b; display:block;">Product</label>
+                    <select onchange="onEditProductSelect(${idx}, this.value)" style="width: 100%;">
+                        ${productOptions}
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.75rem; color:#64748b; display:block;">Price (₹)</label>
+                    <input type="number" min="0" step="any" value="${item.unit_price}" oninput="onEditUnitPriceChange(${idx}, this.value)" style="width: 100%;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem; color:#64748b; display:block;">Qty</label>
+                    <input type="number" min="1" value="${item.quantity}" oninput="onEditQuantityChange(${idx}, this.value)" style="width: 100%;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem; color:#64748b; display:block;">Total</label>
+                    <span style="font-weight: bold; color: var(--primary); display:block; padding-top:6px;">₹${lineTotal}</span>
+                </div>
+                <div>
+                    <label style="font-size:0.75rem; display:block; visibility:hidden;">Del</label>
+                    <button type="button" class="remove-item-btn" title="Remove item" onclick="removeEditItemRow(${idx})">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function addEditItemRow() {
+    const defaultProduct = inventory[0] || { id: 'Z01', name: 'Item', price: 500 };
+    editItems.push({
+        product_id: defaultProduct.id,
+        product_name: defaultProduct.name,
+        unit_price: parseFloat(defaultProduct.price),
+        quantity: 1
+    });
+    renderEditItemsList();
+    recalcEditTotals(true);
+}
+
+function removeEditItemRow(index) {
+    if (editItems.length <= 1) {
+        return alert("An order must have at least one item.");
+    }
+    editItems.splice(index, 1);
+    renderEditItemsList();
+    recalcEditTotals(true);
+}
+
+function onEditProductSelect(index, productId) {
+    const prod = inventory.find(p => p.id === productId);
+    if (prod && editItems[index]) {
+        editItems[index].product_id = prod.id;
+        editItems[index].product_name = prod.name;
+        editItems[index].unit_price = parseFloat(prod.price);
+        renderEditItemsList();
+        recalcEditTotals(true);
+    }
+}
+
+function onEditQuantityChange(index, val) {
+    const qty = parseInt(val, 10);
+    if (!isNaN(qty) && qty > 0 && editItems[index]) {
+        editItems[index].quantity = qty;
+        recalcEditTotals(true);
+        // Update just the line total display without re-rendering to keep input focus
+        const rows = document.querySelectorAll('.edit-item-row');
+        if (rows[index]) {
+            const totalSpan = rows[index].querySelector('span');
+            if (totalSpan) totalSpan.textContent = `₹${(editItems[index].unit_price * qty).toFixed(2)}`;
+        }
+    }
+}
+
+function onEditUnitPriceChange(index, val) {
+    const price = parseFloat(val);
+    if (!isNaN(price) && price >= 0 && editItems[index]) {
+        editItems[index].unit_price = price;
+        recalcEditTotals(true);
+        const rows = document.querySelectorAll('.edit-item-row');
+        if (rows[index]) {
+            const totalSpan = rows[index].querySelector('span');
+            if (totalSpan) totalSpan.textContent = `₹${(price * editItems[index].quantity).toFixed(2)}`;
+        }
+    }
+}
+
+function onEditDiscountInput() {
+    recalcEditTotals(true);
+}
+
+function recalcEditTotals(updateGrandTotal = true) {
+    const subtotal = editItems.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+    const discPercent = Math.min(Math.max(parseFloat(document.getElementById('edit-discount-percent').value) || 0, 0), 100);
+    const discAmount = Math.round((subtotal * discPercent) / 100 * 100) / 100;
+
+    const subtotalEl = document.getElementById('edit-calc-subtotal');
+    const discountEl = document.getElementById('edit-discount-amount');
+    const grandTotalInput = document.getElementById('edit-grand-total');
+
+    if (subtotalEl) subtotalEl.textContent = `₹${subtotal.toFixed(2)}`;
+    if (discountEl) discountEl.textContent = `- ₹${discAmount.toFixed(2)} (${discPercent}%)`;
+
+    if (updateGrandTotal && grandTotalInput) {
+        const finalPrice = Math.max(0, subtotal - discAmount);
+        grandTotalInput.value = finalPrice.toFixed(2);
+    }
+}
+
+async function submitOrderEdit(event) {
+    event.preventDefault();
+    const saveBtn = document.getElementById('save-edit-btn');
+    const orderId = document.getElementById('edit-order-id').value;
+
+    const customerName = document.getElementById('edit-customer-name').value.trim();
+    const customerPhone = document.getElementById('edit-customer-phone').value.trim();
+    const orderDate = document.getElementById('edit-order-date').value;
+    const paymentStatus = document.getElementById('edit-payment-status').value;
+    const discountPercent = parseFloat(document.getElementById('edit-discount-percent').value) || 0;
+    const grandTotal = parseFloat(document.getElementById('edit-grand-total').value);
+
+    if (!customerName || !customerPhone) {
+        return alert("Please enter Customer Name and Mobile Number.");
+    }
+
+    if (!orderDate) {
+        return alert("Please select Order Date & Time.");
+    }
+
+    if (editItems.length === 0) {
+        return alert("Please include at least one item in the order.");
+    }
+
+    if (isNaN(grandTotal) || grandTotal < 0) {
+        return alert("Please enter a valid Final Price.");
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving to Database...";
+
+    const payload = {
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        order_date: orderDate,
+        payment_status: paymentStatus,
+        discount_percent: discountPercent,
+        total_amount: grandTotal,
+        items: editItems
+    };
+
+    try {
+        const response = await fetch(`/api/orders/${orderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to update order');
+        }
+
+        closeEditModal();
+        // Refresh database overview immediately
+        await loadDatabaseAnalytics();
+        alert('Order updated successfully in MySQL database!');
+    } catch (err) {
+        alert('Error updating order: ' + err.message);
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Changes to Database";
     }
 }
 
